@@ -6,6 +6,8 @@ import jax.numpy as jnp
 
 import jax_utils
 
+import cnn
+
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 64
 Z_DIM = 64
@@ -33,6 +35,33 @@ class MLPGenerator(eqx.Module):
         for layer in self.layers:
             z = layer(z)
         return z.reshape(1, 28, 28)
+
+
+class ConvGenerator(eqx.Module):
+    proj: eqx.nn.Linear
+    layers: list
+
+    def __init__(self, key):
+        k0, k1, k2, k3 = jax.random.split(key, 4)
+        self.proj = eqx.nn.Linear(Z_DIM, 128 * 7 * 7, key=k0)
+        self.layers = [
+            eqx.nn.GroupNorm(8, 128),
+            jax.nn.silu,
+            eqx.nn.ConvTranspose2d(128, 64, 4, stride=2, padding=1, key=k1),  # 7 → 14
+            eqx.nn.GroupNorm(8, 64),
+            jax.nn.silu,
+            eqx.nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1, key=k2),  # 14 → 28
+            eqx.nn.GroupNorm(8, 32),
+            jax.nn.silu,
+            eqx.nn.Conv2d(32, 1, 3, padding=1, key=k3),
+            jax.nn.sigmoid,
+        ]
+
+    def __call__(self, z):
+        x = self.proj(z).reshape(128, 7, 7)
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
 def cdist(a: Float[Array, "N D"], b: Float[Array, "M D"]) -> Float[Array, "N M"]:

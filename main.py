@@ -13,7 +13,9 @@ class CliArgs:
 def main(cli: CliArgs):
     print(f"hello, {cli.name}")
 
+
 CNN_PATH = "./cnn.eqx"
+
 
 @app.command()
 def train_cnn(path: str = CNN_PATH, epochs: int = 5):
@@ -26,9 +28,11 @@ def train_cnn(path: str = CNN_PATH, epochs: int = 5):
 def greet(name: str):
     print(f"Hey {name}!")
 
+
 @app.command()
 def cnn_gui():
     import cnn_gui
+
     model = cnn.deser_model(CNN_PATH)
     cnn_gui.launch_drawing_app(cnn_gui.eqx_predictor(model))
 
@@ -39,7 +43,8 @@ DRIFT_PATH = "./drift.eqx"
 def init_generator():
     import drift
     import jax_utils
-    return drift.MLPGenerator(jax_utils.get_key())
+
+    return drift.ConvGenerator(jax_utils.get_key())
 
 
 @app.command()
@@ -47,6 +52,7 @@ def train_drift(path: str = DRIFT_PATH, steps: int = 5000):
     """Train the generator with the drifting loss."""
     import equinox as eqx
     import drift
+
     generator = drift.train(init_generator(), steps)
     eqx.tree_serialise_leaves(path, generator)
 
@@ -57,6 +63,7 @@ def drift_gui(path: str = DRIFT_PATH, n: int = 64):
     import equinox as eqx
     import drift
     import gen_gui
+
     generator = eqx.tree_deserialise_leaves(path, init_generator())
     gen_gui.launch_sample_viewer(
         gen_gui.eqx_sampler(generator, drift.Z_DIM, n),
