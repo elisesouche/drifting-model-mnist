@@ -25,11 +25,6 @@ def train_cnn(path: str = CNN_PATH, epochs: int = 5):
 
 
 @app.command()
-def greet(name: str):
-    print(f"Hey {name}!")
-
-
-@app.command()
 def cnn_gui():
     import cnn_gui
 
@@ -53,7 +48,7 @@ def train_drift(path: str = DRIFT_PATH, steps: int = 5000):
     import equinox as eqx
     import drift
 
-    generator = drift.train(init_generator(), steps)
+    generator = drift.train(init_generator(), steps, cnn.deser_model(CNN_PATH))
     eqx.tree_serialise_leaves(path, generator)
 
 

@@ -15,6 +15,8 @@ LEARNING_RATE = 1e-3
 class CNN(eqx.Module):
     layers: list
 
+    FEATURE_LAYERS = (1, 4, 7)
+
     def __init__(self, rand_key):
         k1, k2, k3, k4 = jax.random.split(rand_key, 4)
         self.layers = [
@@ -36,6 +38,14 @@ class CNN(eqx.Module):
         for layer in self.layers:
             x = layer(x)
         return x
+
+    def features(self, x: Float[Array, "1 28 28"]):
+        feats = []
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i in self.FEATURE_LAYERS:
+                feats.append(x)
+        return feats
 
 
 def cross_entropy(

@@ -11,7 +11,7 @@ import cnn
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 64
 Z_DIM = 64
-TEMPERATURE = 3.0
+TEMPERATURE = 0.1
 
 
 class MLPGenerator(eqx.Module):
@@ -102,25 +102,54 @@ def compute_V(
     return V
 
 
-def train(generator, steps):
+def pixel_loss(model, e, x_real):
+    x = jax.vmap(model)(e).reshape(e.shape[0], -1)  # [N, 784]
+    y_neg = x
+    y_pos = x_real.reshape(x_real.shape[0], -1)
+    V = compute_V(x, y_pos, y_neg, TEMPERATURE)
+    x_drifted = jax.lax.stop_gradient(x + V)
+    loss = jnp.mean(jnp.sum((x - x_drifted) ** 2, axis=1))
+    return loss
+
+
+def normalize(x: Float[Array, "N D"], y: Float[Array, "M D"]):
+    s = jax.lax.stop_gradient(cdist(x, y).mean())
+    return x / s, y / s
+
+
+def feature_loss(model, encoder: cnn.CNN, e, x_real):
+    x = jax.vmap(model)(e)
+    fx = jax.vmap(encoder.features)(x)
+    fy = jax.vmap(encoder.features)(x_real)
+
+    def loss_at(fx, fy):
+        fx, fy = normalize(fx, fy)
+        V = compute_V(fx, fy, fx, TEMPERATURE)
+        fx_drifted = jax.lax.stop_gradient(fx + V)
+        loss = jnp.mean(jnp.sum((fx - fx_drifted) ** 2, axis=1))
+        return loss
+
+    return sum(
+        loss_at(a.reshape(a.shape[0], -1), b.reshape(b.shape[0], -1))
+        for a, b in zip(fx, fy)
+    )
+
+
+def train(generator, steps, encoder: cnn.CNN | None):
     from mnist import get_loader
 
     trainloader = get_loader(True, BATCH_SIZE, augment=False)
     optim = optax.adamw(LEARNING_RATE)
     opt_state = optim.init(eqx.filter(generator, eqx.is_array))
 
-    def loss(model, e, x_real):
-        x = jax.vmap(model)(e).reshape(e.shape[0], -1)  # [N, 784]
-        y_neg = x
-        y_pos = x_real.reshape(x_real.shape[0], -1)
-        V = compute_V(x, y_pos, y_neg, TEMPERATURE)
-        x_drifted = jax.lax.stop_gradient(x + V)
-        loss = jnp.mean(jnp.sum((x - x_drifted) ** 2, axis=1))
-        return loss
-
     @eqx.filter_jit
-    def step(model, e, x_real, opt_state):
-        loss_v, grad = eqx.filter_value_and_grad(loss)(model, e, x_real)
+    def step(model, encoder, e, x_real, opt_state):
+        if encoder is None:
+            loss_v, grad = eqx.filter_value_and_grad(pixel_loss)(model, e, x_real)
+        else:
+            loss_v, grad = eqx.filter_value_and_grad(feature_loss)(
+                model, encoder, e, x_real
+            )
         updates, opt_state = optim.update(
             grad, opt_state, eqx.filter(model, eqx.is_array)
         )
@@ -134,7 +163,7 @@ def train(generator, steps):
     for s, (x, cls) in zip(range(steps), infinite_train_loader()):
         x = x.numpy()
         e = jax.random.normal(jax_utils.get_key(), (x.shape[0], Z_DIM))
-        generator, opt_state, loss_v = step(generator, e, x, opt_state)
+        generator, opt_state, loss_v = step(generator, encoder, e, x, opt_state)
         if s % 100 == 0:
             print(f"Training step {s}/{steps}. Loss = {loss_v}")
 
