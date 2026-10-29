@@ -33,5 +33,36 @@ def cnn_gui():
     cnn_gui.launch_drawing_app(cnn_gui.eqx_predictor(model))
 
 
+DRIFT_PATH = "./drift.eqx"
+
+
+def init_generator():
+    import drift
+    import jax_utils
+    return drift.MLPGenerator(jax_utils.get_key())
+
+
+@app.command()
+def train_drift(path: str = DRIFT_PATH, steps: int = 5000):
+    """Train the generator with the drifting loss."""
+    import equinox as eqx
+    import drift
+    generator = drift.train(init_generator(), steps)
+    eqx.tree_serialise_leaves(path, generator)
+
+
+@app.command()
+def drift_gui(path: str = DRIFT_PATH, n: int = 64):
+    """Show generated samples, labelled by the CNN."""
+    import equinox as eqx
+    import drift
+    import gen_gui
+    generator = eqx.tree_deserialise_leaves(path, init_generator())
+    gen_gui.launch_sample_viewer(
+        gen_gui.eqx_sampler(generator, drift.Z_DIM, n),
+        gen_gui.eqx_batch_predictor(cnn.deser_model(CNN_PATH)),
+    )
+
+
 if __name__ == "__main__":
     app()
