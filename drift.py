@@ -9,9 +9,9 @@ import jax_utils
 import cnn
 
 LEARNING_RATE = 1e-3
-BATCH_SIZE = 64
+BATCH_SIZE = 256
 Z_DIM = 64
-TEMPERATURE = 0.1
+TEMPERATURE = 0.05
 
 
 class MLPGenerator(eqx.Module):

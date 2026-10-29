@@ -20,16 +20,16 @@ class CNN(eqx.Module):
     def __init__(self, rand_key):
         k1, k2, k3, k4 = jax.random.split(rand_key, 4)
         self.layers = [
-            eqx.nn.Conv2d(1, 32, kernel_size=3, padding=1, key=k1),
+            eqx.nn.Conv2d(1, 64, kernel_size=3, padding=1, key=k1),
             jax.nn.relu,
             eqx.nn.MaxPool2d(kernel_size=2, stride=2),
-            eqx.nn.Conv2d(32, 64, kernel_size=3, padding=1, key=k2),
+            eqx.nn.Conv2d(64, 128, kernel_size=3, padding=1, key=k2),
             jax.nn.relu,
             eqx.nn.MaxPool2d(kernel_size=2, stride=2),
-            eqx.nn.Conv2d(64, 128, kernel_size=3, padding=1, key=k3),
+            eqx.nn.Conv2d(128, 256, kernel_size=3, padding=1, key=k3),
             jax.nn.relu,
             functools.partial(jnp.mean, axis=(1, 2)),
-            eqx.nn.Linear(128, 10, key=k4),
+            eqx.nn.Linear(256, 10, key=k4),
             jax.nn.log_softmax,
         ]
         super().__init__()
@@ -110,7 +110,7 @@ def train_model(epochs: int) -> CNN:
 
     model = init_model()
     optim = optax.adamw(LEARNING_RATE)
-    train_loader = mnist.get_loader(True, BATCH_SIZE)
+    train_loader = mnist.get_loader(True, BATCH_SIZE, augment=True)
     trained_model = train(model, train_loader, optim, epochs * len(train_loader))
     return trained_model
 
