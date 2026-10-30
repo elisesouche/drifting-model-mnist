@@ -11,7 +11,7 @@ import cnn
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 256
 Z_DIM = 64
-TEMPERATURE = 0.05
+TEMPERATURE = 0.3
 
 
 class MLPGenerator(eqx.Module):
@@ -51,6 +51,41 @@ class ConvGenerator(eqx.Module):
             eqx.nn.GroupNorm(8, 64),
             jax.nn.silu,
             eqx.nn.ConvTranspose2d(64, 32, 4, stride=2, padding=1, key=k2),  # 14 → 28
+            eqx.nn.GroupNorm(8, 32),
+            jax.nn.silu,
+            eqx.nn.Conv2d(32, 1, 3, padding=1, key=k3),
+            jax.nn.sigmoid,
+        ]
+
+    def __call__(self, z):
+        x = self.proj(z).reshape(128, 7, 7)
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
+def upsample2x(x: Float[Array, "C H W"]) -> Float[Array, "C 2H 2W"]:
+    # nearest-neighbour: each pixel becomes a 2×2 block
+    return x.repeat(2, axis=1).repeat(2, axis=2)
+
+
+class UpsampleGenerator(eqx.Module):
+    proj: eqx.nn.Linear
+    layers: list
+
+    def __init__(self, key):
+        super().__init__()
+        k0, k1, k2, k3 = jax.random.split(key, 4)
+        self.proj = eqx.nn.Linear(Z_DIM, 128 * 7 * 7, key=k0)
+        self.layers = [
+            eqx.nn.GroupNorm(8, 128),
+            jax.nn.silu,
+            upsample2x,
+            eqx.nn.Conv2d(128, 64, 3, padding=1, key=k1),  # 7 → 14
+            eqx.nn.GroupNorm(8, 64),
+            jax.nn.silu,
+            upsample2x,
+            eqx.nn.Conv2d(64, 32, 3, padding=1, key=k2),  # 14 → 28
             eqx.nn.GroupNorm(8, 32),
             jax.nn.silu,
             eqx.nn.Conv2d(32, 1, 3, padding=1, key=k3),

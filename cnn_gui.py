@@ -225,6 +225,22 @@ def eqx_predictor(model, mean: float = 0, std: float = 1) -> Predictor:
     return predict
 
 
+def eqx_reconstructor(model) -> Callable[[np.ndarray], np.ndarray]:
+    """Wrap an equinox autoencoder mapping (1,28,28) -> (1,28,28) logits."""
+    import equinox as eqx
+    import jax
+
+    @eqx.filter_jit
+    def reconstruct(model, x):
+        return jax.nn.sigmoid(model(x))
+
+    def run(image: np.ndarray) -> np.ndarray:
+        x = np.asarray(image, np.float32)[None]
+        return np.asarray(reconstruct(model, x))[0]
+
+    return run
+
+
 # Interactive drawing
 
 
@@ -433,6 +449,7 @@ class InputView:
         self,
         ax: Axes,
         preprocess: Callable[[np.ndarray], np.ndarray] = centre_like_mnist,
+        title: str = "model input",
     ):
         self.preprocess = preprocess
         self._artist = ax.imshow(
@@ -444,7 +461,7 @@ class InputView:
         )
         ax.set_xticks([])
         ax.set_yticks([])
-        ax.set_title("model input", fontsize=10, color=TEXT_COLOR)
+        ax.set_title(title, fontsize=10, color=TEXT_COLOR)
         self.artists = [self._artist]
 
     def __call__(self, image: np.ndarray) -> None:
@@ -480,21 +497,37 @@ def launch_drawing_app(
     preprocess: Callable[[np.ndarray], np.ndarray] = centre_like_mnist,
     initial_image=None,
     block: bool = True,
+    reconstruct: Optional[Callable[[np.ndarray], np.ndarray]] = None,
 ):
     """Open a window with a drawing pad, the preprocessed model input and,
-    if `predict` is given, the live class probabilities.
+    if given, the live class probabilities from `predict` and the image
+    rebuilt by `reconstruct` (e.g. an autoencoder, see `eqx_reconstructor`).
 
     Returns (fig, pad); keep a reference to `pad`, or its callbacks get
     garbage collected.
     """
-    fig = plt.figure(figsize=(10, 4) if predict else (6.5, 4))
-    widths = [3, 1.6, 3.4] if predict else [3, 1.6]
+    widths = [3, 1.6]
+    if reconstruct is not None:
+        widths.append(1.6)
+    if predict is not None:
+        widths.append(3.4)
+    fig = plt.figure(figsize=(sum(widths) + 2, 4))
     grid = fig.add_gridspec(2, len(widths), width_ratios=widths, height_ratios=[10, 1])
     blitter = BlitManager(fig.canvas)
     pad = DrawingPad(fig.add_subplot(grid[0, 0]), blitter=blitter)
     views = [InputView(fig.add_subplot(grid[0, 1]), preprocess)]
+    if reconstruct is not None:
+        views.append(
+            InputView(
+                fig.add_subplot(grid[0, len(views) + 1]),
+                lambda image: reconstruct(preprocess(image)),
+                title="reconstruction",
+            )
+        )
     if predict is not None:
-        views.append(ProbabilityView(fig.add_subplot(grid[0, 2]), predict, preprocess))
+        views.append(
+            ProbabilityView(fig.add_subplot(grid[0, len(views) + 1]), predict, preprocess)
+        )
     for view in views:
         blitter.add(*view.artists)
         pad.subscribe(view)
