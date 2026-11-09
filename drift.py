@@ -11,7 +11,7 @@ import cnn
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 256
 Z_DIM = 64
-TEMPERATURE = 0.3
+TEMPERATURE = 0.1
 
 
 class MLPGenerator(eqx.Module):
